@@ -1,0 +1,12 @@
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+
+# Generated preview / debug renders (the committed one lives in images/)
+weather_preview.png
+
+# OS cruft
+.DS_Store
+Thumbs.db

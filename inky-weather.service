@@ -1,0 +1,12 @@
+[Unit]
+Description=Inky wHAT weather station - update display
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+# %h expands to the service user's home directory.
+WorkingDirectory=%h/inky-weather
+ExecStart=%h/inky-weather/venv/bin/python %h/inky-weather/weather.py
+# Give the network/API a moment and don't hang forever.
+TimeoutStartSec=120
