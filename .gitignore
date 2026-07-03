@@ -4,8 +4,9 @@ __pycache__/
 venv/
 .venv/
 
-# Generated preview / debug renders (the committed one lives in images/)
+# Generated preview / debug renders (the committed ones live in images/)
 weather_preview.png
+setup_preview.png
 
 # OS cruft
 .DS_Store

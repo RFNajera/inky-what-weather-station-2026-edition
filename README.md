@@ -16,6 +16,12 @@ Forecast data comes from the free [Open-Meteo](https://open-meteo.com/) API and
 watches/warnings from the free [US National Weather Service](https://www.weather.gov/documentation/services-web-api)
 API — so there's **no account to create and no API key to manage**.
 
+Because it's fully headless (no keyboard, no screen to type on), it also
+includes **phone-based Wi-Fi setup**: take it anywhere, and when it can't find a
+known network it opens its own hotspot and shows on-screen instructions so you
+can add the new Wi-Fi from your phone. See
+[Connecting to a new Wi-Fi network](#connecting-to-a-new-wi-fi-network).
+
 ![The finished weather station — current conditions and 5-day forecast](images/current-view.jpg)
 
 ---
@@ -31,6 +37,11 @@ the panel):
 the left panel (this render shows a live NWS *Extreme Heat Warning*):
 
 ![Rendered layout with an active alert banner](images/screen-render-with-alert.png)
+
+**Wi-Fi setup screen** — shown automatically when the station can't reach a
+known network (see [Connecting to a new Wi-Fi network](#connecting-to-a-new-wi-fi-network)):
+
+![Wi-Fi setup mode screen](images/setup-mode-screen.png)
 
 **On the real e-ink panel, in a 3D-printed enclosure:**
 
@@ -114,6 +125,52 @@ python3 weather.py --preview --demo-alert "Severe Thunderstorm Warning"
 > US the banner simply never appears; the forecast still works worldwide via
 > Open-Meteo.
 
+## Connecting to a new Wi-Fi network
+
+The station is **headless** — there's no keyboard or touchscreen. To let you
+change networks anywhere (say you bring it to an office, a friend's house, or a
+conference), the installer sets up [**Comitup**](https://davesteele.github.io/comitup/),
+a headless Wi-Fi provisioning service.
+
+### When does it enter setup mode?
+
+On every boot the Pi tries to join any Wi-Fi network it already knows. **If it
+can't connect (unknown network, out of range, wrong password), it automatically
+falls back to setup mode** and broadcasts its own hotspot. When you're on a
+network it already knows — like your home Wi-Fi — it just connects and you never
+see the setup screen. Networks you add are remembered, so a place you've
+visited before reconnects on its own next time.
+
+### How to connect it (from your phone)
+
+When the station is in setup mode, the display shows these steps:
+
+1. **On your phone, join the Wi-Fi network `WeatherStation-Setup`.**
+   (It's an open network — no password needed to join.)
+2. **A setup page should pop up automatically** (a captive portal, like hotel
+   Wi-Fi). If it doesn't, open a browser and go to **`http://10.41.0.1`**.
+3. **Pick the venue's Wi-Fi** from the list, **enter its password**, and submit.
+
+The Pi joins the new network, remembers it, and the display **returns to the
+weather automatically** within a minute or two. Your phone will drop the
+`WeatherStation-Setup` hotspot once the Pi connects — that's expected.
+
+> **Tip — pre-load known networks:** if you know the Wi-Fi ahead of time, you
+> can add it in advance from a terminal with
+> `sudo nmcli device wifi connect "<SSID>" password "<password>"`, and the
+> station will use it automatically without ever entering setup mode.
+
+### Handy Wi-Fi commands
+
+```bash
+sudo journalctl -u comitup -n 30      # what state is Wi-Fi provisioning in?
+comitup-cli                           # interactive tool to list/join networks
+nmcli connection show                 # list saved networks
+python3 setup_screen.py --preview     # preview the setup screen (writes a PNG)
+```
+
+---
+
 ### Customizing your location and units
 
 Edit the **Configuration** block near the top of `weather.py`:
@@ -157,9 +214,11 @@ python3 weather.py --preview --demo-alert    # with a sample alert banner
 |------|---------|
 | `weather.py` | Fetches the data and renders the display. |
 | `icons.py` | Vector-style weather icons drawn in code (no image assets). |
-| `install.sh` | One-shot installer (packages, SPI/I2C, venv, timer). |
+| `setup_screen.py` | Renders the headless Wi-Fi "setup mode" screen. |
+| `comitup-callback.sh` | Comitup hook: shows the setup screen on hotspot, refreshes weather once reconnected. |
+| `install.sh` | One-shot installer (packages, SPI/I2C, venv, timer, Wi-Fi provisioning). |
 | `inky-weather.service` / `inky-weather.timer` | systemd units for the 30-minute updates. |
-| `images/` | The rendered layout plus photos of the finished build. |
+| `images/` | The rendered layouts plus photos of the finished build. |
 | `LICENSE` | Creative Commons BY-NC-SA 4.0. |
 
 ---
