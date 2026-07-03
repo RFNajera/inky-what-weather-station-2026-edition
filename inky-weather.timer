@@ -1,14 +1,14 @@
 [Unit]
-Description=Run the Inky wHAT weather update every hour
+Description=Run the Inky wHAT weather update every 30 minutes
 
 [Timer]
 # Fire shortly after boot so the screen populates quickly...
 OnBootSec=2min
-# ...then on the hour, every hour.
-OnCalendar=hourly
+# ...then every 30 minutes, on the hour and half-hour.
+OnCalendar=*:0/30
 # If the Pi was asleep/off when a run was due, run once on next wake.
 Persistent=true
-# Small random spread so the API isn't hit at the exact top of the hour.
+# Small random spread so the APIs aren't hit at the exact same instant.
 RandomizedDelaySec=30
 Unit=inky-weather.service
 

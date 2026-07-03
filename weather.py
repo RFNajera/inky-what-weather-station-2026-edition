@@ -5,6 +5,10 @@ weather.py - Inky wHAT weather station
 Fetches current conditions + a 5-day forecast from Open-Meteo (no API key
 needed) and renders them to a Pimoroni Inky wHAT (400x300, red/black/white).
 
+Active weather watches & warnings for the location come from the US National
+Weather Service (api.weather.gov, also free / no key) and appear as a red
+banner across the bottom of the left panel when one is in effect.
+
 Layout
 ------
 +--------------------------------------------------+
@@ -16,6 +20,7 @@ Layout
 |   big temp, icon, desc,    |  Thu  [icon]  96/68 |
 |   feels-like, humidity,    |  Fri  [icon]  98/75 |
 |   wind                     |                     |
+| [!! RED ALERT BANNER !!]   |                     |
 +----------------------------+---------------------+
 
 Run with --preview to render to weather_preview.png on a machine without the
@@ -43,6 +48,9 @@ TIMEZONE = "America/New_York"
 TEMP_UNIT = "fahrenheit"    # "fahrenheit" or "celsius"
 WIND_UNIT = "mph"           # "mph", "kmh", "ms", "kn"
 TEMP_SYMBOL = "F" if TEMP_UNIT == "fahrenheit" else "C"
+
+# A contact e-mail is required by the NWS API's User-Agent policy.
+NWS_CONTACT = "rfnajera@gmail.com"
 
 WIDTH, HEIGHT = 400, 300
 
@@ -122,6 +130,56 @@ def fetch_weather():
         return json.loads(resp.read().decode("utf-8"))
 
 
+def fetch_alerts():
+    """Return a list of active NWS watch/warning event names for our location,
+    most severe first, de-duplicated. Returns [] on any error so a network
+    hiccup never blanks the weather display.
+
+    We only surface WATCHES and WARNINGS (per the project spec); advisories,
+    statements, and test messages are filtered out.
+    """
+    url = (
+        "https://api.weather.gov/alerts/active"
+        f"?point={LATITUDE},{LONGITUDE}"
+    )
+    headers = {
+        # NWS asks for an identifying User-Agent with a contact address.
+        "User-Agent": f"inky-weather/1.0 ({NWS_CONTACT})",
+        "Accept": "application/geo+json",
+    }
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except Exception as e:
+        print(f"WARNING fetching alerts: {e}", file=sys.stderr)
+        return []
+
+    # Rank by severity so the worst alert wins the (single) banner line.
+    sev_rank = {"Extreme": 0, "Severe": 1, "Moderate": 2, "Minor": 3,
+                "Unknown": 4}
+    events = []
+    for f in data.get("features", []):
+        p = f.get("properties", {})
+        event = (p.get("event") or "").strip()
+        if not event:
+            continue
+        # Keep only watches & warnings; drop advisories/statements/tests.
+        low = event.lower()
+        if "warning" not in low and "watch" not in low:
+            continue
+        events.append((sev_rank.get(p.get("severity"), 4), event))
+
+    # De-duplicate event names while keeping the most-severe ordering.
+    events.sort(key=lambda t: t[0])
+    seen, ordered = set(), []
+    for _, event in events:
+        if event not in seen:
+            seen.add(event)
+            ordered.append(event)
+    return ordered
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -137,10 +195,73 @@ def compass(deg):
     return dirs[int((deg + 22.5) % 360 // 45)]
 
 
+def _fit_text(draw, text, font, max_w):
+    """Truncate `text` with an ellipsis so it fits within max_w pixels."""
+    if draw.textlength(text, font=font) <= max_w:
+        return text
+    ell = "\u2026"
+    while text and draw.textlength(text + ell, font=font) > max_w:
+        text = text[:-1]
+    return text.rstrip() + ell
+
+
+def _draw_alert_banner(draw, alerts, fonts, x, y, w, h):
+    """Draw a red-background alert banner. `alerts` is a list of NWS event
+    names (already most-severe-first). Shows a warning triangle, then the
+    most severe alert; if more are active, appends a "+N more" hint."""
+    pad = 6
+    tri_w = 22
+    # Warning triangle (white on the red bar) with an exclamation mark.
+    cx = x + pad + tri_w // 2
+    cy = y + h // 2
+    r = tri_w // 2
+    draw.polygon([(cx, cy - r), (cx - r, cy + r), (cx + r, cy + r)],
+                 fill=WHITE)
+    draw.line([cx, cy - r // 2, cx, cy + r // 4], fill=RED, width=3)
+    draw.ellipse([cx - 1, cy + r // 2 - 1, cx + 1, cy + r // 2 + 1],
+                 fill=RED)
+
+    text_x = x + pad + tri_w + 6
+    text_w = (x + w) - text_x - pad
+
+    extra = len(alerts) - 1
+    suffix = f"  +{extra} MORE" if extra > 0 else ""
+
+    # Offer progressively shorter renderings of the primary event so a long
+    # name like "Severe Thunderstorm Warning" stays readable instead of being
+    # cut to "...WARN\u2026". WATCH is kept verbatim (shorter word).
+    full = alerts[0].upper()
+    abbreviated = (full
+                   .replace("WARNING", "WARN")
+                   .replace("THUNDERSTORM", "T-STORM")
+                   .replace("ADVISORY", "ADV"))
+    candidates = [full, abbreviated]
+
+    # Try each candidate at each font size; take the first that fits.
+    for cand in candidates:
+        for font_key in ("day_bold", "small", "tiny"):
+            f = fonts[font_key]
+            suffix_w = draw.textlength(suffix, font=f) if suffix else 0
+            if draw.textlength(cand, font=f) + suffix_w <= text_w:
+                th = draw.textbbox((0, 0), cand, font=f)[3]
+                ty = y + (h - th) // 2 - 2
+                draw.text((text_x, ty), cand, font=f, fill=WHITE)
+                if suffix:
+                    draw.text((text_x + draw.textlength(cand, font=f), ty),
+                              suffix, font=f, fill=WHITE)
+                return
+    # Last resort: truncate the abbreviated event to fit the smallest font.
+    f = fonts["tiny"]
+    fitted = _fit_text(draw, abbreviated + suffix, f, text_w)
+    th = draw.textbbox((0, 0), fitted, font=f)[3]
+    draw.text((text_x, y + (h - th) // 2 - 2), fitted, font=f, fill=WHITE)
+
+
 # ---------------------------------------------------------------------------
 # Rendering
 # ---------------------------------------------------------------------------
-def render(data, fonts):
+def render(data, fonts, alerts=None):
+    alerts = alerts or []
     img = Image.new("P", (WIDTH, HEIGHT), WHITE)
     # Tell Pillow which RGB the 3 palette slots map to (for the PNG preview)
     img.putpalette([255, 255, 255,   0, 0, 0,   255, 0, 0] + [0, 0, 0] * 253)
@@ -148,6 +269,10 @@ def render(data, fonts):
 
     cur = data["current"]
     daily = data["daily"]
+
+    # Reserve space at the bottom of the LEFT panel for an alert banner, but
+    # only when there's actually an alert to show.
+    banner_h = 40 if alerts else 0
 
     # ---- Top strip: last updated -----------------------------------------
     now = dt.datetime.now()
@@ -193,9 +318,10 @@ def render(data, fonts):
     desc = wmo_text(code)
     text_centered(draw, left_cx, strip_h + 116, desc, fonts["big"], BLACK)
 
-    # detail rows
-    detail_y = strip_h + 158
-    line_gap = 26
+    # detail rows (nudge up slightly when a banner is present so nothing
+    # collides with it)
+    detail_y = strip_h + 150 - (10 if banner_h else 0)
+    line_gap = 25
     details = [
         f"Feels like  {feels}\u00b0{TEMP_SYMBOL}",
         f"Humidity   {humidity}%",
@@ -203,6 +329,13 @@ def render(data, fonts):
     ]
     for i, line in enumerate(details):
         draw.text((20, detail_y + i * line_gap), line, font=fonts["med"], fill=BLACK)
+
+    # ---- Alert banner across the bottom of the LEFT panel ----------------
+    if banner_h:
+        by0 = HEIGHT - banner_h
+        # solid red bar spanning the left column only (up to the divider)
+        draw.rectangle([0, by0, split_x, HEIGHT], fill=RED)
+        _draw_alert_banner(draw, alerts, fonts, 0, by0, split_x, banner_h)
 
     # ---- RIGHT 1/3: 5-day forecast ---------------------------------------
     right_x = split_x
@@ -264,6 +397,10 @@ def main():
     ap = argparse.ArgumentParser(description="Inky wHAT weather station")
     ap.add_argument("--preview", action="store_true",
                     help="Render to a PNG instead of the display")
+    ap.add_argument("--demo-alert", metavar="EVENT", nargs="?",
+                    const="Severe Thunderstorm Warning",
+                    help="Force a sample alert banner (for previews/testing). "
+                         "Optionally pass an event name.")
     args = ap.parse_args()
 
     fonts = load_fonts()
@@ -273,7 +410,19 @@ def main():
         print(f"ERROR fetching weather: {e}", file=sys.stderr)
         sys.exit(1)
 
-    img = render(data, fonts)
+    if args.demo_alert:
+        alerts = [args.demo_alert]
+    elif args.demo_alert is not None:
+        # --demo-alert "" explicitly requests a no-alert render.
+        alerts = []
+    else:
+        # Alerts are best-effort: a failure here returns [] and the display
+        # still shows the weather.
+        alerts = fetch_alerts()
+    if alerts:
+        print(f"Active watches/warnings: {alerts}")
+
+    img = render(data, fonts, alerts=alerts)
     img.save(PREVIEW_PATH)
     print(f"Saved preview -> {PREVIEW_PATH}")
 

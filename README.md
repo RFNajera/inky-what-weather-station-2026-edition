@@ -4,13 +4,17 @@ A simple, **inexpensive weather station** built around a Pimoroni Inky wHAT
 e-ink display and a Raspberry Pi Zero 2 W. It shows the **current conditions**
 in a large window on the left two-thirds of the screen, a **5-day forecast** as
 icons with high/low temperatures on the right third, and a **"last updated"**
-timestamp along the top. It refreshes **once an hour**, all by itself.
+timestamp along the top. When the National Weather Service has an active
+**watch or warning** for your location, a bold **red alert banner** appears
+across the bottom of the current-conditions window. It refreshes **every 30
+minutes**, all by itself.
 
 This is a **great weekend project for a cheap weather station**: the parts are
 affordable, the e-ink screen sips power and stays readable in daylight, and once
 it's running you can hang it on a wall or set it on a desk and forget about it.
-Weather data comes from the free [Open-Meteo](https://open-meteo.com/) API, so
-there's **no account to create and no API key to manage**.
+Forecast data comes from the free [Open-Meteo](https://open-meteo.com/) API and
+watches/warnings from the free [US National Weather Service](https://www.weather.gov/documentation/services-web-api)
+API — so there's **no account to create and no API key to manage**.
 
 ![The finished weather station — current conditions and 5-day forecast](images/current-view.jpg)
 
@@ -22,6 +26,11 @@ there's **no account to create and no API key to manage**.
 the panel):
 
 ![Rendered layout preview](images/screen-render.png)
+
+**With an active watch/warning**, a red alert banner appears at the bottom of
+the left panel (this render shows a live NWS *Extreme Heat Warning*):
+
+![Rendered layout with an active alert banner](images/screen-render-with-alert.png)
 
 **On the real e-ink panel, in a 3D-printed enclosure:**
 
@@ -82,7 +91,28 @@ search for "Inky wHAT case" or "Pimoroni e-paper enclosure."
 The installer enables SPI/I2C, adds the `dtoverlay=spi0-0cs` overlay the Inky
 driver needs, creates a Python virtual environment with `Pillow` and
 `inky[rpi]`, and installs a `systemd` user timer that refreshes the screen every
-hour (and ~2 minutes after each boot).
+**30 minutes** (and ~2 minutes after each boot).
+
+### Weather watches & warnings
+
+On each update the station also asks the [US National Weather Service alerts
+API](https://www.weather.gov/documentation/services-web-api) for any **active
+watches or warnings** at your coordinates. If one is in effect, the most severe
+alert is shown in a **red banner** across the bottom of the current-conditions
+window (with a `+N MORE` hint if several are active). Advisories, statements,
+and test messages are filtered out so only true watches and warnings appear.
+The alert lookup is best-effort: if the NWS API is briefly unreachable, the
+weather still renders normally.
+
+You can preview the banner without waiting for real severe weather:
+
+```bash
+python3 weather.py --preview --demo-alert "Severe Thunderstorm Warning"
+```
+
+> Alerts are US-only (the NWS API only covers the United States). Outside the
+> US the banner simply never appears; the forecast still works worldwide via
+> Open-Meteo.
 
 ### Customizing your location and units
 
@@ -99,10 +129,24 @@ WIND_UNIT = "mph"           # "mph", "kmh", "ms", "kn"
 Find coordinates for any US ZIP with `https://api.zippopotam.us/us/<ZIP>`. Apply
 changes immediately with `systemctl --user start inky-weather.service`.
 
+### Changing the update frequency
+
+The screen refreshes every 30 minutes by default. To change it, edit
+`OnCalendar` in `~/.config/systemd/user/inky-weather.timer` (e.g. `hourly`, or
+`*:0/15` for every 15 minutes), then:
+
+```bash
+systemctl --user daemon-reload && systemctl --user restart inky-weather.timer
+```
+
+> E-ink refreshes are slow (~15–30 s of flashing) and lifetime-limited, so
+> avoid going much more frequent than this.
+
 ### Preview without the hardware
 
 ```bash
-python3 weather.py --preview   # writes images/screen-render.png-style output
+python3 weather.py --preview                 # normal layout
+python3 weather.py --preview --demo-alert    # with a sample alert banner
 ```
 
 ---
@@ -114,7 +158,7 @@ python3 weather.py --preview   # writes images/screen-render.png-style output
 | `weather.py` | Fetches the data and renders the display. |
 | `icons.py` | Vector-style weather icons drawn in code (no image assets). |
 | `install.sh` | One-shot installer (packages, SPI/I2C, venv, timer). |
-| `inky-weather.service` / `inky-weather.timer` | systemd units for hourly updates. |
+| `inky-weather.service` / `inky-weather.timer` | systemd units for the 30-minute updates. |
 | `images/` | The rendered layout plus photos of the finished build. |
 | `LICENSE` | Creative Commons BY-NC-SA 4.0. |
 
@@ -125,15 +169,17 @@ python3 weather.py --preview   # writes images/screen-render.png-style output
 ```bash
 systemctl --user list-timers inky-weather.timer        # when's the next update?
 systemctl --user start inky-weather.service            # update now
-journalctl --user -u inky-weather.service -n 30        # logs
+journalctl --user -u inky-weather.service -n 30        # logs (incl. active alerts)
 ```
 
 ---
 
 ## Credits & data
 
-- Weather data from [Open-Meteo](https://open-meteo.com/) (free, no API key),
+- Forecast data from [Open-Meteo](https://open-meteo.com/) (free, no API key),
   using [WMO weather codes](https://open-meteo.com/en/docs).
+- Watches & warnings from the [US National Weather Service API](https://www.weather.gov/documentation/services-web-api)
+  (free, no API key; US-only).
 - Display driven by the Pimoroni [`inky`](https://github.com/pimoroni/inky)
   library.
 
