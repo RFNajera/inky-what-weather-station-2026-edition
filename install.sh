@@ -87,14 +87,34 @@ if ! sudo apt-get install -y comitup 2>/dev/null; then
         || echo "   NOTE: install comitup manually - see davesteele.github.io/comitup"
 fi
 
-# Write Comitup config: our friendly hotspot name + a callback that drives
-# the display. (Open hotspot - no password - so it's easy to join.)
+# --- Hotspot password (stored ONLY on this device, never in the repo) -------
+# Generate a simple, memorable phrase like "sunny-cloud-42" the first time,
+# then reuse it on future runs so the password stays stable. The phrase lives
+# in PASSWORD_FILE, which is .gitignored and never committed.
+PASSWORD_FILE="$PROJECT_DIR/wifi_password.txt"
+if [[ ! -s "$PASSWORD_FILE" ]]; then
+    ADJ=(sunny cloudy rainy windy frosty stormy misty breezy snowy hazy)
+    NOUN=(cloud storm breeze meadow river summit harbor comet ember willow)
+    a=${ADJ[$RANDOM % ${#ADJ[@]}]}
+    n=${NOUN[$RANDOM % ${#NOUN[@]}]}
+    num=$(( RANDOM % 90 + 10 ))          # two digits
+    # WPA passwords must be 8-63 chars; "adjective-noun-NN" satisfies this.
+    echo "${a}-${n}-${num}" > "$PASSWORD_FILE"
+    chmod 600 "$PASSWORD_FILE"
+    echo "   Generated a new hotspot password (saved locally, not in git)."
+fi
+AP_PASSWORD="$(cat "$PASSWORD_FILE")"
+
+# Write Comitup config: our friendly hotspot name, a password so the hotspot
+# is secured, and a callback that drives the display.
 sudo tee /etc/comitup.conf >/dev/null <<EOF
 # Managed by the Inky wHAT weather station installer.
 ap_name: $SETUP_SSID
+ap_password: $AP_PASSWORD
 external_callback: /usr/local/bin/comitup-callback
 service_name: comitup
 EOF
+sudo chmod 600 /etc/comitup.conf   # keep the password readable only by root
 
 # Install the callback with this project's path baked in, then make it runnable.
 sudo cp "$PROJECT_DIR/comitup-callback.sh" /usr/local/bin/comitup-callback
@@ -124,5 +144,7 @@ echo
 echo "Wi-Fi setup (when moved to a new network):"
 echo "    The station auto-opens a '$SETUP_SSID' hotspot when it can't"
 echo "    connect. Join it from your phone and follow the on-screen steps."
+echo "    Hotspot password (also shown on the display): $AP_PASSWORD"
+echo "    It is stored locally in wifi_password.txt and is NOT in git."
 echo "    Preview the setup screen: python3 setup_screen.py --preview"
 echo "    Comitup logs: sudo journalctl -u comitup -n 30"

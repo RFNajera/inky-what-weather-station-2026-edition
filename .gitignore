@@ -8,6 +8,10 @@ venv/
 weather_preview.png
 setup_preview.png
 
+# Local secrets - the Wi-Fi hotspot password lives ONLY on the device,
+# never in the repository.
+wifi_password.txt
+
 # OS cruft
 .DS_Store
 Thumbs.db

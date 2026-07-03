@@ -37,6 +37,22 @@ DEFAULT_PORTAL = "http://10.41.0.1"
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PREVIEW_PATH = os.path.join(SCRIPT_DIR, "setup_preview.png")
 
+# The hotspot password is stored ONLY on the device (never in the git repo).
+# The installer generates a memorable phrase and writes it here; this screen
+# reads it back so it can be shown on the display when you need to connect.
+PASSWORD_FILE = os.path.join(SCRIPT_DIR, "wifi_password.txt")
+
+
+def read_local_password():
+    """Return the hotspot password from the local (git-ignored) file, or None
+    if there isn't one (i.e. the hotspot is open)."""
+    try:
+        with open(PASSWORD_FILE, "r", encoding="utf-8") as fh:
+            pw = fh.read().strip()
+            return pw or None
+    except OSError:
+        return None
+
 
 def load_fonts():
     reg = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
@@ -90,36 +106,38 @@ def render_setup(ssid=DEFAULT_SSID, portal=DEFAULT_PORTAL, password=None,
               fonts["small"], BLACK)
 
     # ---- Step 1: join the hotspot ---------------------------------------
-    y += 30
+    y += 28
     _text(draw, 16, y, "1.", fonts["step_b"], BLACK)
     _text(draw, 40, y, "On your phone, join this Wi-Fi:", fonts["step"], BLACK)
-    y += 26
-    # SSID in a boxed monospace value so it stands out
-    box_pad = 6
-    val = ssid
-    vb = draw.textbbox((0, 0), val, font=fonts["value"])
-    vw, vh = vb[2] - vb[0], vb[3] - vb[1]
-    bx0, by0 = 40, y
-    draw.rectangle([bx0, by0, bx0 + vw + 2 * box_pad, by0 + vh + 2 * box_pad],
-                   outline=RED, width=2)
-    _text(draw, bx0 + box_pad, by0 + box_pad - 2, val, fonts["value"], RED)
+    y += 24
+    # Network name and (optional) password on their own labelled rows so both
+    # stay easy to read on the e-ink panel.
+    label_x, val_x = 40, 118
+    _text(draw, label_x, y, "Network:", fonts["small"], BLACK)
+    _text(draw, val_x, y - 3, ssid, fonts["value"], RED)
+    y += 24
     if password:
-        _text(draw, bx0 + vw + 2 * box_pad + 12, by0 + box_pad,
-              f"pass: {password}", fonts["small"], BLACK)
+        _text(draw, label_x, y, "Password:", fonts["small"], BLACK)
+        _text(draw, val_x, y - 3, password, fonts["value"], RED)
+        y += 24
+    else:
+        _text(draw, label_x, y, "(open network - no password)",
+              fonts["small"], BLACK)
+        y += 22
 
     # ---- Step 2: open the portal ----------------------------------------
-    y = by0 + vh + 2 * box_pad + 16
+    y += 6
     _text(draw, 16, y, "2.", fonts["step_b"], BLACK)
-    _text(draw, 40, y, "A setup page should open. If not, visit:",
+    _text(draw, 40, y, "A setup page opens. If not, visit:",
           fonts["step"], BLACK)
-    y += 26
+    y += 23
     _text(draw, 40, y, portal, fonts["value"], RED)
 
     # ---- Step 3: pick network -------------------------------------------
-    y += 34
+    y += 30
     _text(draw, 16, y, "3.", fonts["step_b"], BLACK)
     _text(draw, 40, y, "Pick the venue's Wi-Fi, enter its", fonts["step"], BLACK)
-    y += 22
+    y += 21
     _text(draw, 40, y, "password, and submit.", fonts["step"], BLACK)
 
     # ---- Footer ----------------------------------------------------------
@@ -146,11 +164,15 @@ def main():
     ap.add_argument("--ssid", default=DEFAULT_SSID)
     ap.add_argument("--portal", default=DEFAULT_PORTAL)
     ap.add_argument("--password", default=None,
-                    help="Hotspot password, if one is configured")
+                    help="Hotspot password to show. If omitted, it's read "
+                         "from the local wifi_password.txt (if present).")
     args = ap.parse_args()
 
+    # If no password was passed explicitly, fall back to the local file.
+    password = args.password if args.password is not None else read_local_password()
+
     img = render_setup(ssid=args.ssid, portal=args.portal,
-                       password=args.password)
+                       password=password)
     img.save(PREVIEW_PATH)
     print(f"Saved preview -> {PREVIEW_PATH}")
 

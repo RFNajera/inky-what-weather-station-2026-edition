@@ -143,10 +143,12 @@ visited before reconnects on its own next time.
 
 ### How to connect it (from your phone)
 
-When the station is in setup mode, the display shows these steps:
+When the station is in setup mode, the display shows these steps — **including
+the hotspot's password**, so you can read it right off the screen:
 
-1. **On your phone, join the Wi-Fi network `WeatherStation-Setup`.**
-   (It's an open network — no password needed to join.)
+1. **On your phone, join the Wi-Fi network `WeatherStation-Setup`** using the
+   **password shown on the display** (a short memorable phrase such as
+   `sunny-cloud-42`).
 2. **A setup page should pop up automatically** (a captive portal, like hotel
    Wi-Fi). If it doesn't, open a browser and go to **`http://10.41.0.1`**.
 3. **Pick the venue's Wi-Fi** from the list, **enter its password**, and submit.
@@ -154,6 +156,25 @@ When the station is in setup mode, the display shows these steps:
 The Pi joins the new network, remembers it, and the display **returns to the
 weather automatically** within a minute or two. Your phone will drop the
 `WeatherStation-Setup` hotspot once the Pi connects — that's expected.
+
+### About the hotspot password
+
+The setup hotspot is **secured with a password** so nobody nearby can join it.
+On first install the installer **generates a simple, memorable phrase**
+(adjective-noun-number, e.g. `frosty-comet-73`) and:
+
+- **stores it only on the device** in `wifi_password.txt` (which is
+  `.gitignore`d — it is **never committed to this repository**), and
+- **shows it on the setup screen**, so you always have it when you need it.
+
+The installer also prints it once at the end of the install. Because it's saved
+locally, re-running the installer keeps the same password. To rotate it, delete
+`wifi_password.txt` and re-run `./install.sh` (or edit `ap_password` in
+`/etc/comitup.conf` and reboot). You can read the current one any time on the
+Pi with `cat wifi_password.txt`.
+
+> **Security note:** the password never leaves the device and is not in git.
+> Treat your local `wifi_password.txt` and `/etc/comitup.conf` as private.
 
 > **Tip — pre-load known networks:** if you know the Wi-Fi ahead of time, you
 > can add it in advance from a terminal with

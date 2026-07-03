@@ -25,6 +25,9 @@ SETUP_SSID="WeatherStation-Setup"       # must match comitup.conf ap_name
 PY="$PROJECT_DIR/venv/bin/python"
 STATE="${1:-}"
 
+# The setup screen reads the (local, git-ignored) hotspot password itself from
+# $PROJECT_DIR/wifi_password.txt, so we don't need to pass it here.
+
 log() { logger -t inky-weather-wifi "$*"; echo "$*"; }
 
 case "$STATE" in
