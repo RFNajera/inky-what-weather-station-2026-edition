@@ -14,12 +14,12 @@ Layout
 +--------------------------------------------------+
 |  LAST UPDATED ............ (top strip)           |
 +----------------------------+---------------------+
-|                            |  Mon  [icon]  88/68 |
-|   CURRENT WEATHER          |  Tue  [icon]  90/65 |
-|   (left 2/3 "window")      |  Wed  [icon]  92/68 |
-|   big temp, icon, desc,    |  Thu  [icon]  96/68 |
-|   feels-like, humidity,    |  Fri  [icon]  98/75 |
-|   wind                     |                     |
+|  [icon]  BIG TEMP  F       |  Mon  [icon]  88/68 |
+|          (H 88\u00b0  L 68\u00b0)      |  Tue  [icon]  90/65 |
+|         Description        |  Wed  [icon]  92/68 |
+|   Feels like  ..           |  Thu  [icon]  96/68 |
+|   Humidity    ..           |  Fri  [icon]  98/75 |
+|   Wind        ..           |                     |
 | [!! RED ALERT BANNER !!]   |                     |
 +----------------------------+---------------------+
 
@@ -99,16 +99,18 @@ def load_fonts():
     bold = candidates[1]
     try:
         return {
-            "huge": ImageFont.truetype(bold, 76),
-            "big": ImageFont.truetype(bold, 30),
-            "med": ImageFont.truetype(regular, 20),
+            "huge": ImageFont.truetype(bold, 66),      # big current temp
+            "big": ImageFont.truetype(bold, 26),       # condition label / unit
+            "med": ImageFont.truetype(regular, 18),    # detail rows
+            "hilo": ImageFont.truetype(bold, 16),      # today's hi/lo pill
             "small": ImageFont.truetype(regular, 16),
             "tiny": ImageFont.truetype(regular, 13),
             "day_bold": ImageFont.truetype(bold, 15),
         }
     except OSError:
         d = ImageFont.load_default()
-        return {k: d for k in ("huge", "big", "med", "small", "tiny", "day_bold")}
+        return {k: d for k in ("huge", "big", "med", "hilo", "small", "tiny",
+                               "day_bold")}
 
 
 # ---------------------------------------------------------------------------
@@ -299,29 +301,46 @@ def render(data, fonts, alerts=None):
 
     left_cx = split_x // 2
 
+    # Today's forecast high/low (index 0 = today) shown next to the current
+    # temperature so you can see at a glance how much more the day still has
+    # to give.
+    today_hi = round(daily["temperature_2m_max"][0])
+    today_lo = round(daily["temperature_2m_min"][0])
+
     # big current icon, top-left of the window
-    icon_size = 96
-    icons.draw_icon(draw, code, 14, strip_h + 10, icon_size, is_day=is_day)
+    icon_size = 88
+    icons.draw_icon(draw, code, 14, strip_h + 6, icon_size, is_day=is_day)
 
     # big temperature to the right of the icon
     temp_str = f"{temp}\u00b0"
-    temp_x = 116
-    draw.text((temp_x, strip_h + 6), temp_str, font=fonts["huge"], fill=BLACK)
+    temp_x = 108
+    draw.text((temp_x, strip_h + 4), temp_str, font=fonts["huge"], fill=BLACK)
+    temp_w = draw.textlength(temp_str, font=fonts["huge"])
     # small unit letter, tucked just under the degree symbol so it never
     # collides with the column divider
-    unit_x = temp_x + draw.textlength(temp_str, font=fonts["huge"]) - 2
-    # keep the unit letter safely inside the left column
-    unit_x = min(unit_x, split_x - 22)
-    draw.text((unit_x, strip_h + 60), TEMP_SYMBOL, font=fonts["big"], fill=RED)
+    unit_x = min(temp_x + temp_w - 2, split_x - 20)
+    draw.text((unit_x, strip_h + 50), TEMP_SYMBOL, font=fonts["big"], fill=RED)
 
-    # condition description, centred under the icon/temp block
+    # Today's Hi / Lo, just below the big temperature.
+    hilo_str = f"H {today_hi}\u00b0   L {today_lo}\u00b0"
+    hilo_w = draw.textlength(hilo_str, font=fonts["hilo"])
+    # keep the pill aligned under the big temperature block
+    hilo_x = temp_x
+    hilo_y = strip_h + 78
+    # subtle red outline pill so it reads as a distinct today-summary chip
+    draw.rounded_rectangle(
+        [hilo_x - 4, hilo_y - 2, hilo_x + hilo_w + 6, hilo_y + 20],
+        radius=8, outline=RED, width=1)
+    draw.text((hilo_x, hilo_y), hilo_str, font=fonts["hilo"], fill=RED)
+
+    # condition description, centred under the icon/temp/hi-lo block
     desc = wmo_text(code)
-    text_centered(draw, left_cx, strip_h + 116, desc, fonts["big"], BLACK)
+    text_centered(draw, left_cx, strip_h + 108, desc, fonts["big"], BLACK)
 
     # detail rows (nudge up slightly when a banner is present so nothing
     # collides with it)
-    detail_y = strip_h + 150 - (10 if banner_h else 0)
-    line_gap = 25
+    detail_y = strip_h + 144 - (12 if banner_h else 0)
+    line_gap = 22
     details = [
         f"Feels like  {feels}\u00b0{TEMP_SYMBOL}",
         f"Humidity   {humidity}%",

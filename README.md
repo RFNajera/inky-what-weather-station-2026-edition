@@ -2,8 +2,9 @@
 
 A simple, **inexpensive weather station** built around a Pimoroni Inky wHAT
 e-ink display and a Raspberry Pi Zero 2 W. It shows the **current conditions**
-in a large window on the left two-thirds of the screen, a **5-day forecast** as
-icons with high/low temperatures on the right third, and a **"last updated"**
+in a large window on the left two-thirds of the screen — including the current
+temperature, a **today's high/low** chip, feels-like, humidity, and wind — with
+a **5-day forecast** as icons on the right third and a **"last updated"**
 timestamp along the top. When the National Weather Service has an active
 **watch or warning** for your location, a bold **red alert banner** appears
 across the bottom of the current-conditions window. It refreshes **every 30
